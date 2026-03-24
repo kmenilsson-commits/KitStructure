@@ -1,0 +1,18 @@
+{
+  "name": "qtc-kit-configurator",
+  "version": "1.0.0",
+  "description": "Quantum Connect Kit Configurator — Sales Lookup Tool",
+  "scripts": {
+    "build": "cd client && npm run build",
+    "push": "clasp push",
+    "deploy": "npm run build && clasp push",
+    "open": "clasp open",
+    "setup-sheets": "clasp run setupDatabase",
+    "login": "clasp login"
+  },
+  "devDependencies": {
+    "@google/clasp": "^2.4.2",
+    "@types/google-apps-script": "^1.0.83",
+    "typescript": "^5.3.3"
+  }
+}

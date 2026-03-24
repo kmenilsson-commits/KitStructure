@@ -1,0 +1,4 @@
+# clasp pushes everything in rootDir (./gas) by default.
+# Only explicitly exclude files that should NOT go to GAS.
+node_modules/
+.DS_Store
