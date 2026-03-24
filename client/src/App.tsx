@@ -12,7 +12,7 @@ import KitEditor from './components/admin/KitEditor'
 import BrandManager from './components/admin/BrandManager'
 import RequestList from './components/admin/RequestList'
 
-const APP_VERSION = 'V1.7'
+const APP_VERSION = 'V1.11'
 
 type SalesScreen =
   | { screen: 'brand-grid' }
@@ -37,6 +37,7 @@ export default function App() {
   const [adminLoading, setAdminLoading] = useState(false)
   const [editingKit, setEditingKit] = useState<Kit | null | undefined>(undefined)
   const [prefillModelId, setPrefillModelId] = useState<string | undefined>(undefined)
+  const [prefillRequestId, setPrefillRequestId] = useState<string | undefined>(undefined)
 
   // Admin preview mode — lets admins see the sales UI
   const [previewMode, setPreviewMode] = useState(false)
@@ -69,8 +70,9 @@ export default function App() {
     if (!auth || auth.role !== 'admin') return
     setAdminLoading(true)
     api.getAdminData()
-      .then(data => { setAdminData(data); setAdminLoading(false) })
-      .catch(() => setAdminLoading(false))
+      .then(data => setAdminData(data))
+      .catch(() => {})
+      .finally(() => setAdminLoading(false))
   }, [auth])
 
   useEffect(() => {
@@ -108,11 +110,22 @@ export default function App() {
            adminData.brands.find(b => b.id === m.brandId)?.name.toLowerCase() === req.brandName.toLowerCase()
     )
     setPrefillModelId(model?.id)
+    setPrefillRequestId(req.id)
     setEditingKit(null)
-    setAdminView('kit-list') // ensures we're in the kit section
+    setAdminView('kit-list')
   }
 
-  const handleSaveKit    = async (kit: Kit)    => { await api.saveKit(kit);         setEditingKit(undefined); setPrefillModelId(undefined); loadAdminData() }
+  const handleSaveKit = async (kit: Kit) => {
+    await api.saveKit(kit)
+    // If created from a request, auto-resolve it
+    if (prefillRequestId) {
+      await api.updateKitRequest(prefillRequestId, 'resolved', 'Kit created and saved')
+    }
+    setEditingKit(undefined)
+    setPrefillModelId(undefined)
+    setPrefillRequestId(undefined)
+    loadAdminData()
+  }
   const handleDeleteKit  = async (id: string)  => { await api.deleteKit(id);        loadAdminData() }
   const handleSaveBrand  = async (b: Brand)    => { await api.saveBrand(b);         loadAdminData() }
   const handleDeleteBrand= async (id: string)  => { await api.deleteBrand(id);      loadAdminData() }
@@ -265,7 +278,7 @@ export default function App() {
               models={adminData.models}
               prefillModelId={prefillModelId}
               onSave={handleSaveKit}
-              onCancel={() => { setEditingKit(undefined); setPrefillModelId(undefined) }}
+              onCancel={() => { setEditingKit(undefined); setPrefillModelId(undefined); setPrefillRequestId(undefined) }}
             />
           </div>
         )}
