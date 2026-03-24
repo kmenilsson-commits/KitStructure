@@ -186,7 +186,7 @@ export default function BrandManager({
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* ── Left panel: Brands ── */}
-        <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+        <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden flex flex-col max-h-[calc(100vh-200px)]">
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50">
             <h3 className="text-sm font-semibold text-gray-700">Brands</h3>
             <button
@@ -285,7 +285,7 @@ export default function BrandManager({
           )}
 
           {/* Brand list */}
-          <ul className="divide-y divide-gray-100">
+          <ul className="divide-y divide-gray-100 overflow-y-auto flex-1">
             {brands.length === 0 && (
               <li className="px-4 py-8 text-center text-sm text-gray-400">No brands yet.</li>
             )}
@@ -356,7 +356,7 @@ export default function BrandManager({
         </div>
 
         {/* ── Right panel: Models ── */}
-        <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+        <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden flex flex-col max-h-[calc(100vh-200px)]">
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50">
             <h3 className="text-sm font-semibold text-gray-700">
               {selectedBrand ? `Models — ${selectedBrand.name}` : 'Models'}
@@ -458,7 +458,7 @@ export default function BrandManager({
               No models for this brand yet.
             </div>
           ) : (
-            <ul className="divide-y divide-gray-100">
+            <ul className="divide-y divide-gray-100 overflow-y-auto flex-1">
               {brandModels.map((model) => {
                 const isDeletePending = modelDeletePending === model.id;
                 return (
