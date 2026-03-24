@@ -1,6 +1,69 @@
 import { useState } from 'react';
 import { Search } from 'lucide-react';
 import type { Brand, Model } from '../../types';
+import { BUNDLED_LOGOS } from '../../data/brandLogos';
+
+// Known brand → domain mappings for Clearbit logo lookup
+const BRAND_DOMAIN_MAP: Record<string, string> = {
+  'Airman': 'airman.co.jp',
+  'Atlas': 'atlascopco.com',
+  'Bobcat': 'bobcat.com',
+  'Brokk': 'brokk.com',
+  'Carter': 'carterct.com',
+  'Case': 'casece.com',
+  'CAT': 'cat.com',
+  'Caterpillar': 'cat.com',
+  'Colmar': 'colmar.it',
+  'Coltrax': 'coltrax.fi',
+  'Doosan': 'doosan.com',
+  'Eurocomach': 'eurocomach.it',
+  'Furukawa': 'furukawa.co.jp',
+  'Hanix': 'hanix.co.jp',
+  'Hidromek': 'hidromek.com.tr',
+  'Hitachi': 'hitachi.com',
+  'Hitec': 'hitecmarine.no',
+  'Huddig': 'huddig.com',
+  'Hydrema': 'hydrema.com',
+  'Hyundai': 'hyundai.com',
+  'IHI': 'ihi.co.jp',
+  'JCB': 'jcb.com',
+  'John Deere': 'deere.com',
+  'Kato': 'kato-works.co.jp',
+  'Kobelco': 'kobelco.com',
+  'Komatsu': 'komatsu.com',
+  'Kubota': 'kubota.com',
+  'LiuGong': 'liugong.com',
+  'Liebherr': 'liebherr.com',
+  'Manitou': 'manitou.com',
+  'Mecalac': 'mecalac.com',
+  'Menzi Muck': 'menzimuck.com',
+  'Mitsubishi': 'mitsubishicorp.com',
+  'New Holland': 'newholland.com',
+  'Ponsse': 'ponsse.com',
+  'Sany': 'sany.com',
+  'Samsung': 'samsung.com',
+  'Sumitomo': 'sumitomo.com',
+  'Takeuchi': 'takeuchi-mfg.co.jp',
+  'Terex': 'terex.com',
+  'Volvo': 'volvo.com',
+  'Wacker Neuson': 'wackerneuson.com',
+  'Xcmg': 'xcmg.com',
+  'XCMG': 'xcmg.com',
+  'Yanmar': 'yanmar.com',
+  'Zoomlion': 'zoomlion.com',
+};
+
+export function getClearbitLogoUrl(brandName: string): string {
+  const domain = BRAND_DOMAIN_MAP[brandName]
+    ?? `${brandName.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`;
+  return `https://logo.clearbit.com/${domain}`;
+}
+
+export function getGoogleFaviconUrl(brandName: string): string {
+  const domain = BRAND_DOMAIN_MAP[brandName]
+    ?? `${brandName.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`;
+  return `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
+}
 
 interface Props {
   brands: Brand[];
@@ -36,13 +99,50 @@ function brandColor(name: string): string {
   return colors[hash % colors.length];
 }
 
+/** Renders a brand logo image with automatic fallback: Clearbit → Google favicon → initials circle */
+function BrandLogo({
+  url,
+  fallbackUrl,
+  name,
+  initials,
+  circleColor,
+  size = 16,
+}: {
+  url: string;
+  fallbackUrl: string;
+  name: string;
+  initials: string;
+  circleColor: string;
+  size?: number;
+}) {
+  const [stage, setStage] = useState<'primary' | 'fallback' | 'initials'>('primary');
+
+  if (stage === 'initials') {
+    return (
+      <div
+        className={`w-${size} h-${size} rounded-full ${circleColor} flex items-center justify-center text-white text-xl font-bold select-none`}
+      >
+        {initials}
+      </div>
+    );
+  }
+
+  return (
+    <div className={`w-${size} h-${size} rounded-full overflow-hidden bg-white border border-gray-100 flex items-center justify-center`}>
+      <img
+        src={stage === 'primary' ? url : fallbackUrl}
+        alt={name}
+        className="w-full h-full object-contain p-1.5"
+        onError={() => setStage(stage === 'primary' ? 'fallback' : 'initials')}
+      />
+    </div>
+  );
+}
+
+export { BrandLogo };
+
 export default function BrandGrid({ brands, models, onSelectBrand }: Props) {
   const [search, setSearch] = useState('');
-
-  const activeModels = models.filter((m) => {
-    // A brand is relevant if it has at least one model
-    return true;
-  });
 
   const modelCountByBrand: Record<string, number> = {};
   for (const m of models) {
@@ -84,6 +184,12 @@ export default function BrandGrid({ brands, models, onSelectBrand }: Props) {
             const initials = brandInitials(brand.name);
             const circleColor = brandColor(brand.name);
 
+            // Priority: admin-set URL → bundled logo → Clearbit → Google favicon
+            const logoUrl = brand.logoFilename?.startsWith('http')
+              ? brand.logoFilename
+              : (BUNDLED_LOGOS[brand.name] ?? getClearbitLogoUrl(brand.name));
+            const faviconUrl = getGoogleFaviconUrl(brand.name);
+
             return (
               <button
                 key={brand.id}
@@ -91,11 +197,13 @@ export default function BrandGrid({ brands, models, onSelectBrand }: Props) {
                 className="group flex flex-col items-center gap-3 p-5 bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md hover:border-sw-orange/40 transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-sw-orange"
               >
                 {/* Logo / Initials */}
-                <div
-                  className={`w-16 h-16 rounded-full ${circleColor} flex items-center justify-center text-white text-xl font-bold select-none`}
-                >
-                  {initials}
-                </div>
+                <BrandLogo
+                  url={logoUrl}
+                  fallbackUrl={faviconUrl}
+                  name={brand.name}
+                  initials={initials}
+                  circleColor={circleColor}
+                />
 
                 {/* Brand name */}
                 <span className="text-sm font-semibold text-gray-800 group-hover:text-sw-orange transition-colors text-center leading-tight">

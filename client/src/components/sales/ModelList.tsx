@@ -1,12 +1,15 @@
 import { useState } from 'react';
-import { ArrowLeft, Search } from 'lucide-react';
+import { ArrowLeft, Search, ChevronRight, Loader2 } from 'lucide-react';
 import type { Brand, Model } from '../../types';
 import StatusBadge from '../shared/StatusBadge';
+import { BrandLogo, getClearbitLogoUrl, getGoogleFaviconUrl } from './BrandGrid';
+import { BUNDLED_LOGOS } from '../../data/brandLogos';
 
 interface Props {
   brand: Brand;
   models: Model[];
   modelKitStatus: Record<string, 'available' | 'coming_soon'>;
+  loadingModelId: string | null;
   onSelectModel: (model: Model) => void;
   onBack: () => void;
 }
@@ -30,6 +33,7 @@ export default function ModelList({
   brand,
   models,
   modelKitStatus,
+  loadingModelId,
   onSelectModel,
   onBack,
 }: Props) {
@@ -53,10 +57,15 @@ export default function ModelList({
       </button>
 
       {/* Brand header */}
-      <div className="flex items-center gap-4 mb-8">
-        <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 font-bold text-lg select-none">
-          {brandInitials(brand.name)}
-        </div>
+      <div className="flex items-center gap-4 mb-6">
+        <BrandLogo
+          url={brand.logoFilename?.startsWith('http') ? brand.logoFilename : (BUNDLED_LOGOS[brand.name] ?? getClearbitLogoUrl(brand.name))}
+          fallbackUrl={getGoogleFaviconUrl(brand.name)}
+          name={brand.name}
+          initials={brandInitials(brand.name)}
+          circleColor="bg-gray-400"
+          size={12}
+        />
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{brand.name}</h1>
           <p className="text-sm text-gray-500">
@@ -64,6 +73,11 @@ export default function ModelList({
           </p>
         </div>
       </div>
+
+      {/* Hint */}
+      <p className="text-xs text-gray-400 mb-4">
+        Click a row to view kit details or request a kit.
+      </p>
 
       {/* Search */}
       <div className="relative mb-5 max-w-sm">
@@ -89,18 +103,25 @@ export default function ModelList({
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Tonnage</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Type</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Kit Status</th>
+                <th className="w-8" />
               </tr>
             </thead>
             <tbody>
               {filtered.map((model, i) => {
                 const status = modelKitStatus[model.id];
                 const isLast = i === filtered.length - 1;
+                const isLoading = loadingModelId === model.id;
+                const isDisabled = loadingModelId !== null && !isLoading;
                 return (
                   <tr
                     key={model.id}
-                    onClick={() => onSelectModel(model)}
-                    className={`cursor-pointer hover:bg-orange-50 transition-colors ${
-                      !isLast ? 'border-b border-gray-100' : ''
+                    onClick={() => !loadingModelId && onSelectModel(model)}
+                    className={`transition-colors ${!isLast ? 'border-b border-gray-100' : ''} ${
+                      isLoading
+                        ? 'bg-orange-50'
+                        : isDisabled
+                        ? 'opacity-50 cursor-default'
+                        : 'cursor-pointer hover:bg-orange-50 active:bg-orange-100'
                     }`}
                   >
                     <td className="px-4 py-3 font-medium text-gray-900">{model.name}</td>
@@ -122,10 +143,22 @@ export default function ModelList({
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      {status ? (
+                      {isLoading ? (
+                        <span className="inline-flex items-center gap-1.5 text-xs text-sw-orange font-medium">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          Loading…
+                        </span>
+                      ) : status ? (
                         <StatusBadge status={status} />
                       ) : (
-                        <span className="text-gray-300 text-xs">—</span>
+                        <span className="inline-flex items-center gap-1 text-xs text-sw-orange font-medium">
+                          No kit — tap to request
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-3 py-3 text-right">
+                      {isLoading ? null : (
+                        <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-sw-orange" />
                       )}
                     </td>
                   </tr>

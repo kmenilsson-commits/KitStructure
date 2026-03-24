@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Plus, Pencil, Trash2, Check, X, RefreshCw } from 'lucide-react';
 import type { Brand, Model } from '../../types';
+import { BrandLogo, getClearbitLogoUrl, getGoogleFaviconUrl } from '../sales/BrandGrid';
+import { BUNDLED_LOGOS } from '../../data/brandLogos';
 
 interface Props {
   brands: Brand[];
@@ -216,17 +218,24 @@ export default function BrandManager({
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">
-                    Logo Filename
+                    Logo URL
                   </label>
                   <input
-                    type="text"
+                    type="url"
                     value={brandForm.logoFilename}
                     onChange={(e) =>
                       setBrandForm((f) => ({ ...f, logoFilename: e.target.value }))
                     }
-                    placeholder="volvo.png"
+                    placeholder="https://…"
                     className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sw-orange"
                   />
+                  {brandForm.logoFilename?.startsWith('http') && (
+                    <img
+                      src={brandForm.logoFilename}
+                      alt="Logo preview"
+                      className="mt-2 h-10 object-contain rounded border border-gray-100 bg-white p-1"
+                    />
+                  )}
                 </div>
                 <label className="flex items-center gap-2 text-sm cursor-pointer">
                   <input
@@ -275,14 +284,27 @@ export default function BrandManager({
                   onClick={() => setSelectedBrandId(brand.id)}
                 >
                   {/* Active dot */}
-                  <span
-                    className={`w-2 h-2 rounded-full shrink-0 ${
-                      brand.active ? 'bg-emerald-400' : 'bg-gray-300'
-                    }`}
-                    title={brand.active ? 'Active' : 'Inactive'}
-                  />
+                  {/* Logo thumbnail */}
+                  <div className="w-8 h-8 shrink-0">
+                    <BrandLogo
+                      url={brand.logoFilename?.startsWith('http') ? brand.logoFilename : (BUNDLED_LOGOS[brand.name] ?? getClearbitLogoUrl(brand.name))}
+                      fallbackUrl={getGoogleFaviconUrl(brand.name)}
+                      name={brand.name}
+                      initials={brand.name.slice(0, 2).toUpperCase()}
+                      circleColor="bg-gray-300"
+                      size={8}
+                    />
+                  </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-800 truncate">{brand.name}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-gray-800 truncate">{brand.name}</p>
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                          brand.active ? 'bg-emerald-400' : 'bg-gray-300'
+                        }`}
+                        title={brand.active ? 'Active' : 'Inactive'}
+                      />
+                    </div>
                     {brand.logoFilename && (
                       <p className="text-xs text-gray-400 truncate">{brand.logoFilename}</p>
                     )}

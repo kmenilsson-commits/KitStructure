@@ -12,6 +12,8 @@ import KitEditor from './components/admin/KitEditor'
 import BrandManager from './components/admin/BrandManager'
 import RequestList from './components/admin/RequestList'
 
+const APP_VERSION = 'V1.7'
+
 type SalesScreen =
   | { screen: 'brand-grid' }
   | { screen: 'model-list'; brand: Brand }
@@ -25,6 +27,7 @@ export default function App() {
   const [salesNav, setSalesNav] = useState<SalesScreen>({ screen: 'brand-grid' })
   const [salesData, setSalesData] = useState<BrandsWithModels | null>(null)
   const [salesLoading, setSalesLoading] = useState(false)
+  const [loadingModelId, setLoadingModelId] = useState<string | null>(null)
   const [requestModalOpen, setRequestModalOpen] = useState(false)
   const [requestModalTarget, setRequestModalTarget] = useState<{ brand: Brand; model: Model } | null>(null)
 
@@ -77,8 +80,13 @@ export default function App() {
   const handleSelectBrand = (brand: Brand) => setSalesNav({ screen: 'model-list', brand })
 
   const handleSelectModel = async (brand: Brand, model: Model) => {
-    const kit = await api.getKit(model.id)
-    setSalesNav({ screen: 'kit-detail', brand, model, kit })
+    setLoadingModelId(model.id)
+    try {
+      const kit = await api.getKit(model.id)
+      setSalesNav({ screen: 'kit-detail', brand, model, kit })
+    } finally {
+      setLoadingModelId(null)
+    }
   }
 
   const handleOpenRequestModal = (brand: Brand, model: Model) => {
@@ -103,10 +111,8 @@ export default function App() {
   }
 
   // ─── Kit status map (for ModelList) ─────────────────────────────────────
-  const modelKitStatus: Record<string, 'available' | 'coming_soon'> = {}
-  adminData?.kits.forEach(k => {
-    if (k.status === 'available' || k.status === 'coming_soon') modelKitStatus[k.modelId] = k.status
-  })
+  // Comes from salesData so it works for both sales users and admin preview mode.
+  const modelKitStatus = salesData?.kitStatusByModelId ?? {}
 
   // ─── Loading / error gates ───────────────────────────────────────────────
   if (!auth && !authError) return <LoadingSpinner message="Connecting to Google…" />
@@ -128,9 +134,14 @@ export default function App() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
         {/* Logo + title */}
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-sw-orange flex items-center justify-center font-bold text-sm select-none">QC</div>
-          <span className="font-semibold text-sm hidden sm:block">Quantum Connect Kit Configurator</span>
-          <span className="font-semibold text-sm sm:hidden">QC Kits</span>
+          {/* Steelwrist wordmark */}
+          <svg viewBox="0 0 120 24" className="h-6 w-auto" aria-label="Steelwrist" fill="currentColor">
+            <text y="20" fontSize="20" fontWeight="700" fontFamily="system-ui,sans-serif" letterSpacing="-0.5">steelwrist</text>
+          </svg>
+          <span className="text-white/30 text-lg font-light hidden sm:block">|</span>
+          <span className="font-semibold text-sm hidden sm:block">QTC Kit Configurator</span>
+          <span className="font-semibold text-sm sm:hidden">QTC Kits</span>
+          <span className="text-xs text-white/40 font-mono hidden sm:block">{APP_VERSION}</span>
         </div>
 
         {/* Right side */}
@@ -192,6 +203,7 @@ export default function App() {
               brand={salesNav.brand}
               models={salesData.models.filter(m => m.brandId === salesNav.brand.id)}
               modelKitStatus={modelKitStatus}
+              loadingModelId={loadingModelId}
               onSelectModel={model => handleSelectModel(salesNav.brand, model)}
               onBack={() => setSalesNav({ screen: 'brand-grid' })}
             />

@@ -7,6 +7,14 @@ A **Google Apps Script web app** for the Steelwrist sales team to look up whethe
 
 ---
 
+## Working with Claude
+
+- After completing any code change, **always build, deploy to GAS, and push to git main** without asking.
+- Use the deploy command: `./scripts/build.sh && npx clasp push` (answer "y"), then `npx clasp deploy --deploymentId AKfycbyvaSwCLUfBZ2UD-JxSScVruY2I_Z63eDBiLt4aldnTzUjZBYf_Vw7zsRptMRB_VzJU --description "VX.X"`.
+- Commit and push with a descriptive message after every successful deploy.
+
+---
+
 ## Repo Layout
 
 ```
@@ -18,7 +26,8 @@ KitStructure/
 │       ├── gasApi.ts         # google.script.run Promise wrapper (gasRun<T>)
 │       ├── data/
 │       │   ├── joysticks.ts  # LEFT_JOYSTICKS, RIGHT_JOYSTICKS catalogues
-│       │   └── steeringKits.ts
+│       │   ├── steeringKits.ts
+│       │   └── brandLogos.ts # BUNDLED_LOGOS map — imports PNGs from assets/logos/
 │       └── components/
 │           ├── sales/        # BrandGrid, ModelList, KitDetail, KitRequestModal
 │           └── admin/        # AdminNav, KitList, KitEditor, BrandManager, RequestList
@@ -49,12 +58,17 @@ KitStructure/
 |-------|---------|
 | Brands | id, name, logoFilename, active, createdAt |
 | Models | id, brandId, brandName, name, tonnage, machineType, createdAt |
-| Kits | id, modelId, status, cableLength, leftJoysticks, rightJoysticks, needsFeederValves, needsExtraQio, steeringKits, configPartNumber, prerequisites, limitations, updatedAt, updatedBy, **cableKitPartNumber**, **cableKitDescription** |
+| Kits | id, **modelIds** (JSON array), status, cableLength, leftJoysticks, rightJoysticks, needsFeederValves, needsExtraQio, steeringKits, configPartNumber, prerequisites, limitations, updatedAt, updatedBy, cableKitPartNumber, cableKitDescription |
 | KitRequests | id, brandName, modelName, requestedBy, note, status, createdAt, adminNote |
 | Admins | email |
 
-`leftJoysticks`, `rightJoysticks`, `steeringKits` are JSON array strings (e.g. `["803398","803402"]`).
+`leftJoysticks`, `rightJoysticks`, `steeringKits`, **`modelIds`** are JSON array strings (e.g. `["803398","803402"]`).
 `deleteBrand` soft-deletes (sets active=false). `deleteKit` soft-deletes (sets status='hidden').
+
+### Kit ↔ Model relationship (V1.5+)
+- A kit can be linked to **multiple models** — `modelIds` is a JSON string array of model UUIDs.
+- The old `modelId` (single UUID string) is still handled by `normalizeModelIds()` in DB.ts for backward compatibility.
+- Migration: run `migrateModelIds()` in the GAS editor once to convert existing single-UUID rows to JSON arrays. **No redeploy needed** — the deployed code handles both formats.
 
 ---
 
@@ -98,10 +112,10 @@ npx clasp deploy --deploymentId <ID> --description "VX.X"  # Update live URL
 ## Features Implemented
 
 ### Sales UI (role: sales)
-1. **BrandGrid** — responsive logo grid with search filter
-2. **ModelList** — model table with kit status badges (Available / Coming Soon)
+1. **BrandGrid** — responsive logo grid with search filter; logos loaded via Clearbit API with initials fallback
+2. **ModelList** — model table with kit status badges (Available / Coming Soon); per-row loading spinner when fetching kit; chevron affordance on rows; "No kit — tap to request" label for missing kits
 3. **KitDetail** — full kit breakdown:
-   - Base Kit (614168) — 7 fixed components
+   - Base Kit (614168) — 7 fixed components, **collapsible** to save screen space
    - Boom/Arm Cable (10m = 803411, 15m = 803410)
    - Joysticks (left/right A9 variants with Default badge)
    - Configuration File (machine-specific part number)
@@ -109,12 +123,13 @@ npx clasp deploy --deploymentId <ID> --description "VX.X"  # Update live URL
    - Optional Add-ons (feeder valve / extra QIO module)
    - Steering Kits (CEX/MEX/WEX machine-specific)
    - Prerequisites & Limitations
+   - **Request button only shown when kit is null** (can't request an already-existing kit)
 4. **KitRequestModal** — request a missing kit with optional note
 
 ### Admin UI (role: admin)
 1. **Kit List** — sortable/filterable table; edit/delete actions
-2. **Kit Editor** — full form to create/edit kits (all fields)
-3. **Brand Manager** — two-panel brand + model CRUD
+2. **Kit Editor** — full form to create/edit kits; **multi-model selector filtered by brand** (pick a brand first, then tick multiple models)
+3. **Brand Manager** — two-panel brand + model CRUD; logo thumbnail shown in brand list using Clearbit fallback; logo preview in edit form
 4. **Request List** — manage kit requests with status workflow (new → acknowledged → in_progress → resolved)
 5. **Preview Mode** — toggle to see the app as a sales user (amber banner, "← Back to Admin" button)
 
@@ -153,10 +168,38 @@ npx clasp deploy --deploymentId AKfycbyvaSwCLUfBZ2UD-JxSScVruY2I_Z63eDBiLt4aldnT
 
 ---
 
+## Brand Logos
+
+Logo files live in `Documents/Brand Logos/` (27 brands). The best variant for each brand is copied to `client/src/assets/logos/` and imported as base64 data URIs via `client/src/data/brandLogos.ts`.
+
+Logos are resolved in this priority order:
+1. **Explicit URL** — if `brand.logoFilename` starts with `http`, it is used directly (admin override via Brand Manager).
+2. **Bundled PNG** — `BUNDLED_LOGOS[brand.name]` from `brandLogos.ts`. Covers 27 brands: Airman, Atlas, Bobcat, CAT, Case, Develon, Doosan, Hidromek, Hitachi, Hyundai, JCB, John Deere, Kobelco, Komatsu, Kubota, Liebherr, Link-Belt, Mecalac, Sany, Sumitomo, Sunward, Takeuchi, Terex, Volvo, Wacker Neuson, XCMG, Yanmar.
+3. **Clearbit** — `https://logo.clearbit.com/{domain}` via `BRAND_DOMAIN_MAP` in `BrandGrid.tsx` (free tier, unreliable).
+4. **Google favicon** — `https://www.google.com/s2/favicons?domain={domain}&sz=128` (reliable fallback).
+5. **Coloured initials circle** — last resort.
+
+`BrandLogo` is a shared React component exported from `BrandGrid.tsx` and reused in `ModelList.tsx` and `BrandManager.tsx`. It uses a three-stage error fallback (primary → fallbackUrl → initials).
+
+To add a new logo: copy the PNG to `client/src/assets/logos/`, add an import and entry to `BUNDLED_LOGOS` in `brandLogos.ts`, then rebuild.
+
+---
+
 ## Known Issues / Open Questions
 - `Session.getActiveUser().getEmail()` may return empty string in some deployment configurations — if everyone appears as "sales", check the web app execution mode in GAS.
-- Logo images referenced in `logoFilename` are stored in a Google Drive folder (not yet wired up to serve via GAS — currently shows brand initials as fallback).
 - Steering kit part numbers (900001/900002/900003) are placeholders in `steeringKits.ts`.
+- Clearbit logo API is a free third-party service with no guaranteed uptime — failures fall back to initials silently.
+
+---
+
+## Version History
+
+| Version | GAS Version | Notes |
+|---------|-------------|-------|
+| V1.7 | 7 | Bundled brand logos (27 PNGs inlined as base64); three-stage logo fallback (bundled → Clearbit → Google favicon → initials) |
+| V1.6 | 6 | Brand logos via Clearbit; per-row kit loading spinner; chevron + clearer CTA on model rows; logo thumbnail in BrandManager list; version bump |
+| V1.5 | 5 | Multi-model kit support (modelIds JSON array); KitEditor brand-filtered model picker; Base Kit collapsible; request button hidden for existing kits; Steelwrist logo in header |
+| V1.4 | — | Machine Cable Kit fields (cableKitPartNumber, cableKitDescription); Admin preview mode |
 
 ---
 

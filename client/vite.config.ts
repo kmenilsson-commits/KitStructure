@@ -10,6 +10,7 @@ export default defineConfig({
   build: {
     outDir: '../gas',       // output directly into the gas/ folder
     emptyOutDir: false,     // don't wipe the .ts files in gas/
+    assetsInlineLimit: 1024 * 1024, // inline all assets ≤1 MB as base64 (needed for bundled brand logos)
     rollupOptions: {
       output: {
         inlineDynamicImports: true,
