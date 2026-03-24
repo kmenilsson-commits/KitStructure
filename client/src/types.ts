@@ -20,7 +20,7 @@ export interface Model {
 
 export interface Kit {
   id: string;
-  modelId: string;
+  modelIds: string;            // JSON array string: ["uuid1","uuid2"]
   status: 'available' | 'coming_soon' | 'hidden';
   cableLength: '10m' | '15m';
   leftJoysticks: string;       // JSON array string: ["803398","803402"]
@@ -35,6 +35,13 @@ export interface Kit {
   updatedBy: string;
   cableKitPartNumber: string;  // 6-digit machine-specific cable kit part number
   cableKitDescription: string; // max 256 chars
+  // Original machine joystick info (admin reference fields)
+  joystickRollerType: 'Analog Single' | 'Analog Dual' | 'PWM Single' | 'PWM Dual' | 'Current' | 'Unknown' | '';
+  joystickButtonType: 'Standard' | 'SPDT' | 'Namur' | 'Other' | '';
+  joystickConnectorType: 'Deutsch DT' | 'Deutsch DTM' | 'AMP' | '';
+  joystickConnectorPins: '2' | '4' | '6' | '8' | '10' | '12' | '';
+  safetyGateSignal: 'Active High' | 'Active Lo' | '';
+  machineType: 'CEX' | 'WEX' | 'MEX' | '';
 }
 
 export interface KitRequest {
@@ -56,6 +63,7 @@ export interface AuthResult {
 export interface BrandsWithModels {
   brands: Brand[];
   models: Model[];
+  kitStatusByModelId: Record<string, 'available' | 'coming_soon'>;
 }
 
 export interface AdminData {

@@ -26,7 +26,7 @@ function parseJsonArray(raw: string): string[] {
 
 function buildEmptyKit(): Omit<Kit, 'id' | 'updatedAt' | 'updatedBy'> {
   return {
-    modelId: '',
+    modelIds: '[]',
     status: 'coming_soon',
     cableLength: '10m',
     leftJoysticks: '[]',
@@ -39,15 +39,16 @@ function buildEmptyKit(): Omit<Kit, 'id' | 'updatedAt' | 'updatedBy'> {
     limitations: '',
     cableKitPartNumber: '',
     cableKitDescription: '',
+    joystickRollerType: '',
+    joystickButtonType: '',
+    joystickConnectorType: '',
+    joystickConnectorPins: '',
+    safetyGateSignal: '',
+    machineType: '',
   };
 }
 
 export default function KitEditor({ kit, brands, models, onSave, onCancel }: Props) {
-  // Derive initial brand from kit's model
-  const initialModel = kit ? models.find((m) => m.id === kit.modelId) : undefined;
-  const initialBrandId = initialModel?.brandId ?? '';
-
-  const [selectedBrandId, setSelectedBrandId] = useState(initialBrandId);
   const [form, setForm] = useState<Omit<Kit, 'id' | 'updatedAt' | 'updatedBy'>>(() => {
     if (kit) {
       const { id, updatedAt, updatedBy, ...rest } = kit;
@@ -59,27 +60,46 @@ export default function KitEditor({ kit, brands, models, onSave, onCancel }: Pro
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const filteredModels = useMemo(
-    () => models.filter((m) => m.brandId === selectedBrandId),
-    [models, selectedBrandId]
+  // Derive initial brand from the first selected model
+  const initialBrandId = useMemo(() => {
+    if (!kit) return '';
+    const firstId = parseJsonArray(kit.modelIds)[0];
+    return models.find(m => m.id === firstId)?.brandId ?? '';
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const [pickerBrandId, setPickerBrandId] = useState(initialBrandId);
+
+  const selectedModelIds = parseJsonArray(form.modelIds);
+
+  // All selected model objects
+  const selectedModels = useMemo(
+    () => selectedModelIds.map(id => models.find(m => m.id === id)).filter(Boolean) as Model[],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [form.modelIds, models]
   );
 
-  const selectedModel = useMemo(
-    () => models.find((m) => m.id === form.modelId),
-    [models, form.modelId]
-  );
+  // Primary model drives machineType for steering kits
+  const primaryModel = selectedModels.find(m => m.machineType) ?? selectedModels[0];
 
-  // When brand changes, reset model selection
-  const handleBrandChange = (brandId: string) => {
-    setSelectedBrandId(brandId);
-    setForm((f) => ({ ...f, modelId: '' }));
+  const toggleModel = (modelId: string) => {
+    const current = parseJsonArray(form.modelIds);
+    const updated = current.includes(modelId)
+      ? current.filter(id => id !== modelId)
+      : [...current, modelId];
+    setForm(f => ({ ...f, modelIds: JSON.stringify(updated) }));
   };
 
-  // Keep steeringKits in sync when model changes (clear if machine type changes)
+  // Reset steering kits when model selection changes (machine type may differ)
   useEffect(() => {
-    // Reset steering kits when model changes
-    setForm((f) => ({ ...f, steeringKits: '[]' }));
-  }, [form.modelId]);
+    setForm(f => ({ ...f, steeringKits: '[]' }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.modelIds]);
+
+  // Models available in the picker (filtered by selected picker brand)
+  const pickerModels = useMemo(
+    () => pickerBrandId ? models.filter(m => m.brandId === pickerBrandId) : [],
+    [models, pickerBrandId]
+  );
 
   const leftSelected = parseJsonArray(form.leftJoysticks);
   const rightSelected = parseJsonArray(form.rightJoysticks);
@@ -97,8 +117,8 @@ export default function KitEditor({ kit, brands, models, onSave, onCancel }: Pro
   };
 
   const handleSave = async () => {
-    if (!form.modelId) {
-      setError('Please select a model.');
+    if (selectedModelIds.length === 0) {
+      setError('Please select at least one model.');
       return;
     }
     if (!form.configPartNumber.trim()) {
@@ -126,13 +146,23 @@ export default function KitEditor({ kit, brands, models, onSave, onCancel }: Pro
   };
 
   const steeringOptions =
-    selectedModel?.machineType
-      ? getSteeringKitsForMachineType(selectedModel.machineType)
+    primaryModel?.machineType
+      ? getSteeringKitsForMachineType(primaryModel.machineType)
       : [];
 
-  const titleModel = selectedModel
-    ? `${brands.find((b) => b.id === selectedModel.brandId)?.name ?? ''} ${selectedModel.name}`
-    : '';
+  const titleLabel =
+    selectedModels.length === 0
+      ? ''
+      : selectedModels.length === 1
+      ? `${brands.find(b => b.id === selectedModels[0].brandId)?.name ?? ''} ${selectedModels[0].name}`
+      : `${selectedModels.length} models`;
+
+  // Build grouped model list for the picker
+  const brandById = useMemo(
+    () => Object.fromEntries(brands.map(b => [b.id, b])),
+    [brands]
+  );
+
 
   return (
     <div>
@@ -140,7 +170,7 @@ export default function KitEditor({ kit, brands, models, onSave, onCancel }: Pro
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-xl font-bold text-gray-900">
-            {kit ? `Edit Kit — ${titleModel}` : 'New Kit'}
+            {kit ? `Edit Kit${titleLabel ? ` — ${titleLabel}` : ''}` : 'New Kit'}
           </h2>
           <p className="text-sm text-gray-500 mt-0.5">
             {kit ? 'Update kit details below.' : 'Configure a new Quantum Connect kit.'}
@@ -155,56 +185,99 @@ export default function KitEditor({ kit, brands, models, onSave, onCancel }: Pro
       </div>
 
       <div className="space-y-7 max-w-3xl">
-        {/* Brand + Model */}
+        {/* Model selector — brand first, then models within that brand */}
         <section>
           <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">
             Machine
           </h3>
+
+          {/* Selected model tags */}
+          {selectedModels.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {selectedModels.map(m => (
+                <span
+                  key={m.id}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-sw-orange/10 text-sw-orange border border-sw-orange/20 rounded-full text-xs font-medium"
+                >
+                  {brandById[m.brandId]?.name} {m.name}
+                  <button
+                    type="button"
+                    onClick={() => toggleModel(m.id)}
+                    className="hover:text-orange-700 ml-0.5"
+                    aria-label={`Remove ${m.name}`}
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Brand picker */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Brand</label>
               <select
-                value={selectedBrandId}
-                onChange={(e) => handleBrandChange(e.target.value)}
+                value={pickerBrandId}
+                onChange={e => setPickerBrandId(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sw-orange bg-white"
               >
                 <option value="">Select brand…</option>
-                {brands.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name}
-                  </option>
+                {brands.map(b => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
                 ))}
               </select>
             </div>
+
+            {/* Model checklist for selected brand */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Model</label>
-              <select
-                value={form.modelId}
-                onChange={(e) => setForm((f) => ({ ...f, modelId: e.target.value }))}
-                disabled={!selectedBrandId}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sw-orange bg-white disabled:bg-gray-50 disabled:text-gray-400"
-              >
-                <option value="">Select model…</option>
-                {filteredModels.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                    {m.tonnage ? ` (${m.tonnage} t)` : ''}
-                  </option>
-                ))}
-              </select>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Models{pickerBrandId ? ` — check all that apply` : ''}
+              </label>
+              <div className={`border border-gray-200 rounded-lg overflow-hidden max-h-48 overflow-y-auto ${!pickerBrandId ? 'bg-gray-50' : ''}`}>
+                {!pickerBrandId ? (
+                  <p className="text-xs text-gray-400 px-3 py-3">Select a brand first.</p>
+                ) : pickerModels.length === 0 ? (
+                  <p className="text-xs text-gray-400 px-3 py-3">No models for this brand.</p>
+                ) : (
+                  pickerModels.map(m => {
+                    const checked = selectedModelIds.includes(m.id);
+                    return (
+                      <label
+                        key={m.id}
+                        className={`flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-0 text-sm ${
+                          checked ? 'bg-orange-50' : ''
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleModel(m.id)}
+                          className="w-4 h-4 accent-sw-orange shrink-0"
+                        />
+                        <span className="flex-1 text-gray-800">{m.name}</span>
+                        {m.tonnage && <span className="text-xs text-gray-400">{m.tonnage} t</span>}
+                        {m.machineType && (
+                          <span className="text-xs font-medium text-gray-500 bg-gray-100 border border-gray-200 px-1.5 py-0.5 rounded-full">
+                            {m.machineType}
+                          </span>
+                        )}
+                      </label>
+                    );
+                  })
+                )}
+              </div>
             </div>
           </div>
-          {selectedModel && (
-            <div className="mt-3 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600">
-              Machine type:{' '}
-              <strong>{selectedModel.machineType || 'Not set'}</strong>
-              {selectedModel.tonnage && (
-                <>
-                  {' '}· Tonnage: <strong>{selectedModel.tonnage} t</strong>
-                </>
-              )}
-            </div>
-          )}
+
+          <p className="mt-2 text-xs text-gray-400">
+            {selectedModelIds.length === 0
+              ? 'No models selected'
+              : `${selectedModelIds.length} model${selectedModelIds.length !== 1 ? 's' : ''} selected`}
+            {primaryModel?.machineType && (
+              <> · Machine type: <strong>{primaryModel.machineType}</strong></>
+            )}
+          </p>
         </section>
 
         {/* Status */}
@@ -382,13 +455,13 @@ export default function KitEditor({ kit, brands, models, onSave, onCancel }: Pro
           </div>
         </section>
 
-        {/* Steering Kits (only if model has machineType) */}
-        {selectedModel?.machineType && steeringOptions.length > 0 && (
+        {/* Steering Kits (only if primary model has machineType) */}
+        {primaryModel?.machineType && steeringOptions.length > 0 && (
           <section>
             <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">
               Machine Steering Kits{' '}
               <span className="normal-case text-gray-400 font-normal">
-                ({selectedModel.machineType})
+                ({primaryModel.machineType})
               </span>
             </h3>
             <div className="space-y-2">
@@ -479,6 +552,113 @@ export default function KitEditor({ kit, brands, models, onSave, onCancel }: Pro
                 {form.cableKitDescription.length}/256
               </p>
             </div>
+          </div>
+        </section>
+
+        {/* Original Machine Joystick Info */}
+        <section>
+          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-1">
+            Original Machine Joystick Info
+          </h3>
+          <p className="text-xs text-gray-400 mb-4">Reference data about the machine's existing joystick setup.</p>
+          <div className="space-y-5">
+
+            {/* Roller Type */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Roller Type</label>
+              <div className="flex flex-wrap gap-2">
+                {(['Analog Single', 'Analog Dual', 'PWM Single', 'PWM Dual', 'Current', 'Unknown'] as const).map(v => (
+                  <label key={v} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border cursor-pointer text-sm transition-colors ${form.joystickRollerType === v ? 'border-sw-orange bg-orange-50 text-sw-orange' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
+                    <input type="radio" name="joystickRollerType" value={v} checked={form.joystickRollerType === v} onChange={() => setForm(f => ({ ...f, joystickRollerType: v }))} className="sr-only" />
+                    {v}
+                  </label>
+                ))}
+                {form.joystickRollerType && (
+                  <button type="button" onClick={() => setForm(f => ({ ...f, joystickRollerType: '' }))} className="px-3 py-1.5 text-xs text-gray-400 hover:text-gray-600 border border-dashed border-gray-200 rounded-lg">Clear</button>
+                )}
+              </div>
+            </div>
+
+            {/* Button Type */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Button Type</label>
+              <div className="flex flex-wrap gap-2">
+                {(['Standard', 'SPDT', 'Namur', 'Other'] as const).map(v => (
+                  <label key={v} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border cursor-pointer text-sm transition-colors ${form.joystickButtonType === v ? 'border-sw-orange bg-orange-50 text-sw-orange' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
+                    <input type="radio" name="joystickButtonType" value={v} checked={form.joystickButtonType === v} onChange={() => setForm(f => ({ ...f, joystickButtonType: v }))} className="sr-only" />
+                    {v}
+                  </label>
+                ))}
+                {form.joystickButtonType && (
+                  <button type="button" onClick={() => setForm(f => ({ ...f, joystickButtonType: '' }))} className="px-3 py-1.5 text-xs text-gray-400 hover:text-gray-600 border border-dashed border-gray-200 rounded-lg">Clear</button>
+                )}
+              </div>
+            </div>
+
+            {/* Connector Type */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Connector Type</label>
+              <div className="flex flex-wrap gap-2">
+                {(['Deutsch DT', 'Deutsch DTM', 'AMP'] as const).map(v => (
+                  <label key={v} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border cursor-pointer text-sm transition-colors ${form.joystickConnectorType === v ? 'border-sw-orange bg-orange-50 text-sw-orange' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
+                    <input type="radio" name="joystickConnectorType" value={v} checked={form.joystickConnectorType === v} onChange={() => setForm(f => ({ ...f, joystickConnectorType: v }))} className="sr-only" />
+                    {v}
+                  </label>
+                ))}
+                {form.joystickConnectorType && (
+                  <button type="button" onClick={() => setForm(f => ({ ...f, joystickConnectorType: '' }))} className="px-3 py-1.5 text-xs text-gray-400 hover:text-gray-600 border border-dashed border-gray-200 rounded-lg">Clear</button>
+                )}
+              </div>
+            </div>
+
+            {/* Connector Pins */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Connector Pins</label>
+              <div className="flex flex-wrap gap-2">
+                {(['2', '4', '6', '8', '10', '12'] as const).map(v => (
+                  <label key={v} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border cursor-pointer text-sm transition-colors ${form.joystickConnectorPins === v ? 'border-sw-orange bg-orange-50 text-sw-orange' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
+                    <input type="radio" name="joystickConnectorPins" value={v} checked={form.joystickConnectorPins === v} onChange={() => setForm(f => ({ ...f, joystickConnectorPins: v }))} className="sr-only" />
+                    {v}
+                  </label>
+                ))}
+                {form.joystickConnectorPins && (
+                  <button type="button" onClick={() => setForm(f => ({ ...f, joystickConnectorPins: '' }))} className="px-3 py-1.5 text-xs text-gray-400 hover:text-gray-600 border border-dashed border-gray-200 rounded-lg">Clear</button>
+                )}
+              </div>
+            </div>
+
+            {/* Safety Gate Signal */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Safety Gate Signal</label>
+              <div className="flex flex-wrap gap-2">
+                {(['Active High', 'Active Lo'] as const).map(v => (
+                  <label key={v} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border cursor-pointer text-sm transition-colors ${form.safetyGateSignal === v ? 'border-sw-orange bg-orange-50 text-sw-orange' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
+                    <input type="radio" name="safetyGateSignal" value={v} checked={form.safetyGateSignal === v} onChange={() => setForm(f => ({ ...f, safetyGateSignal: v }))} className="sr-only" />
+                    {v}
+                  </label>
+                ))}
+                {form.safetyGateSignal && (
+                  <button type="button" onClick={() => setForm(f => ({ ...f, safetyGateSignal: '' }))} className="px-3 py-1.5 text-xs text-gray-400 hover:text-gray-600 border border-dashed border-gray-200 rounded-lg">Clear</button>
+                )}
+              </div>
+            </div>
+
+            {/* Machine Type */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Machine Type</label>
+              <div className="flex flex-wrap gap-2">
+                {(['CEX', 'WEX', 'MEX'] as const).map(v => (
+                  <label key={v} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border cursor-pointer text-sm transition-colors ${form.machineType === v ? 'border-sw-orange bg-orange-50 text-sw-orange' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
+                    <input type="radio" name="kitMachineType" value={v} checked={form.machineType === v} onChange={() => setForm(f => ({ ...f, machineType: v }))} className="sr-only" />
+                    {v}
+                  </label>
+                ))}
+                {form.machineType && (
+                  <button type="button" onClick={() => setForm(f => ({ ...f, machineType: '' }))} className="px-3 py-1.5 text-xs text-gray-400 hover:text-gray-600 border border-dashed border-gray-200 rounded-lg">Clear</button>
+                )}
+              </div>
+            </div>
+
           </div>
         </section>
 

@@ -29,11 +29,13 @@ function setupDatabase(): void {
     'id', 'brandId', 'brandName', 'name', 'tonnage', 'machineType', 'createdAt'
   ]]);
 
-  sheets['Kits'].getRange(1, 1, 1, 16).setValues([[
-    'id', 'modelId', 'status', 'cableLength', 'leftJoysticks', 'rightJoysticks',
+  sheets['Kits'].getRange(1, 1, 1, 22).setValues([[
+    'id', 'modelIds', 'status', 'cableLength', 'leftJoysticks', 'rightJoysticks',
     'needsFeederValves', 'needsExtraQio', 'steeringKits', 'configPartNumber',
     'prerequisites', 'limitations', 'updatedAt', 'updatedBy',
-    'cableKitPartNumber', 'cableKitDescription'
+    'cableKitPartNumber', 'cableKitDescription',
+    'joystickRollerType', 'joystickButtonType', 'joystickConnectorType',
+    'joystickConnectorPins', 'safetyGateSignal', 'machineType'
   ]]);
 
   sheets['KitRequests'].getRange(1, 1, 1, 8).setValues([[
@@ -147,6 +149,39 @@ function resetDatabase(): void {
   Logger.log('Database reset complete.');
 }
 
+// ─── One-time migration: convert modelId column to JSON array (modelIds) ─────
+// Run this ONCE on an existing database after deploying the multi-model update.
+// Wraps any plain UUID in column 2 into a JSON array ["uuid"].
+// Safe to run multiple times — already-migrated rows are skipped.
+function migrateModelIds(): void {
+  const spreadsheetId = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID');
+  if (!spreadsheetId) throw new Error('SPREADSHEET_ID not set. Run setupDatabase() first.');
+
+  const ss = SpreadsheetApp.openById(spreadsheetId);
+  const sheet = ss.getSheetByName('Kits');
+  if (!sheet) throw new Error('Kits sheet not found.');
+
+  // Update column header
+  sheet.getRange(1, 2).setValue('modelIds');
+
+  const data = sheet.getDataRange().getValues();
+  let migrated = 0;
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    if (!row[0]) continue;
+    const val = (row[1] || '').toString().trim();
+    if (!val) continue;
+    try {
+      const parsed = JSON.parse(val);
+      if (Array.isArray(parsed)) continue; // already migrated
+    } catch (_) {}
+    // Single UUID — wrap in array
+    sheet.getRange(i + 1, 2).setValue(JSON.stringify([val]));
+    migrated++;
+  }
+  Logger.log('migrateModelIds: migrated ' + migrated + ' row(s).');
+}
+
 // ─── One-time migration: add cableKit columns to existing Kits sheet ─────────
 // Run this ONCE on an existing database to add the new columns.
 // Safe to run multiple times — it checks if columns already exist.
@@ -175,4 +210,39 @@ function migrateCableKitColumns(): void {
   } else {
     Logger.log('Migration complete.');
   }
+}
+
+// ─── One-time migration: add joystick info columns (17-22) to existing Kits ──
+// Run this ONCE on an existing database after deploying V1.8.
+// Safe to run multiple times — checks if columns already exist.
+function migrateJoystickInfoColumns(): void {
+  const spreadsheetId = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID');
+  if (!spreadsheetId) throw new Error('SPREADSHEET_ID not set. Run setupDatabase() first.');
+
+  const ss = SpreadsheetApp.openById(spreadsheetId);
+  const sheet = ss.getSheetByName('Kits');
+  if (!sheet) throw new Error('Kits sheet not found.');
+
+  const newCols: { col: number; name: string }[] = [
+    { col: 17, name: 'joystickRollerType' },
+    { col: 18, name: 'joystickButtonType' },
+    { col: 19, name: 'joystickConnectorType' },
+    { col: 20, name: 'joystickConnectorPins' },
+    { col: 21, name: 'safetyGateSignal' },
+    { col: 22, name: 'machineType' },
+  ];
+
+  const lastCol = sheet.getLastColumn();
+  const headers = lastCol > 0 ? sheet.getRange(1, 1, 1, lastCol).getValues()[0] : [];
+  let added = 0;
+
+  for (const { col, name } of newCols) {
+    if (headers[col - 1] !== name) {
+      sheet.getRange(1, col).setValue(name);
+      added++;
+      Logger.log('Added column ' + col + ': ' + name);
+    }
+  }
+
+  Logger.log(added > 0 ? 'migrateJoystickInfoColumns: added ' + added + ' column(s).' : 'migrateJoystickInfoColumns: already up to date.');
 }

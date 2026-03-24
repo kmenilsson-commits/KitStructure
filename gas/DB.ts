@@ -127,6 +127,30 @@ function deleteModel(modelId: string): void {
 
 // ─── Kits ─────────────────────────────────────────────────────────────────────
 
+// Normalise the modelIds column: old rows store a plain UUID string; new rows
+// store a JSON array string like '["uuid1","uuid2"]'.  Always returns a valid
+// JSON array string.
+function normalizeModelIds(val: string): string {
+  const trimmed = (val || '').toString().trim();
+  if (!trimmed) return '[]';
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (Array.isArray(parsed)) return trimmed;
+  } catch (_) {}
+  // Old format: single plain UUID
+  return JSON.stringify([trimmed]);
+}
+
+// Parse modelIds JSON string to a plain string array (safe).
+function parseModelIds(raw: string): string[] {
+  try {
+    const parsed = JSON.parse(normalizeModelIds(raw));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_) {
+    return [];
+  }
+}
+
 function getAllKits(): Kit[] {
   const sheet = getSheet(SHEET_KITS);
   const data = sheet.getDataRange().getValues();
@@ -139,14 +163,16 @@ function getAllKits(): Kit[] {
   return kits;
 }
 
+// Returns the first non-hidden kit that applies to the given modelId.
 function getKitByModelId(modelId: string): Kit | null {
   const sheet = getSheet(SHEET_KITS);
   const data = sheet.getDataRange().getValues();
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
-    if (row[KIT_COLS.modelId - 1].toString() === modelId) {
-      return rowToKit(row);
-    }
+    if (!row[0]) continue;
+    const kit = rowToKit(row);
+    if (kit.status === 'hidden') continue;
+    if (parseModelIds(kit.modelIds).includes(modelId)) return kit;
   }
   return null;
 }
@@ -154,7 +180,7 @@ function getKitByModelId(modelId: string): Kit | null {
 function rowToKit(row: any[]): Kit {
   return {
     id:                   row[KIT_COLS.id - 1].toString(),
-    modelId:              row[KIT_COLS.modelId - 1].toString(),
+    modelIds:             normalizeModelIds(row[KIT_COLS.modelIds - 1].toString()),
     status:               row[KIT_COLS.status - 1].toString(),
     cableLength:          row[KIT_COLS.cableLength - 1].toString(),
     leftJoysticks:        row[KIT_COLS.leftJoysticks - 1].toString(),
@@ -170,6 +196,13 @@ function rowToKit(row: any[]): Kit {
     // Columns 15-16 may be absent in older rows — default to empty string
     cableKitPartNumber:   (row[KIT_COLS.cableKitPartNumber - 1] || '').toString(),
     cableKitDescription:  (row[KIT_COLS.cableKitDescription - 1] || '').toString(),
+    // Columns 17-22 may be absent in older rows — default to empty string
+    joystickRollerType:    (row[KIT_COLS.joystickRollerType - 1] || '').toString(),
+    joystickButtonType:    (row[KIT_COLS.joystickButtonType - 1] || '').toString(),
+    joystickConnectorType: (row[KIT_COLS.joystickConnectorType - 1] || '').toString(),
+    joystickConnectorPins: (row[KIT_COLS.joystickConnectorPins - 1] || '').toString(),
+    safetyGateSignal:      (row[KIT_COLS.safetyGateSignal - 1] || '').toString(),
+    machineType:           (row[KIT_COLS.machineType - 1] || '').toString(),
   };
 }
 
@@ -182,14 +215,17 @@ function saveKit(kit: Kit): Kit {
     const data = sheet.getDataRange().getValues();
     for (let i = 1; i < data.length; i++) {
       if (data[i][0].toString() === kit.id) {
-        sheet.getRange(i + 1, 1, 1, 16).setValues([[
-          kit.id, kit.modelId, kit.status, kit.cableLength,
+        sheet.getRange(i + 1, 1, 1, 22).setValues([[
+          kit.id, kit.modelIds, kit.status, kit.cableLength,
           kit.leftJoysticks, kit.rightJoysticks,
           kit.needsFeederValves, kit.needsExtraQio,
           kit.steeringKits, kit.configPartNumber,
           kit.prerequisites, kit.limitations,
           kit.updatedAt, kit.updatedBy,
-          kit.cableKitPartNumber, kit.cableKitDescription
+          kit.cableKitPartNumber, kit.cableKitDescription,
+          kit.joystickRollerType, kit.joystickButtonType,
+          kit.joystickConnectorType, kit.joystickConnectorPins,
+          kit.safetyGateSignal, kit.machineType
         ]]);
         return kit;
       }
@@ -197,13 +233,16 @@ function saveKit(kit: Kit): Kit {
   }
   kit.id = generateId();
   sheet.appendRow([
-    kit.id, kit.modelId, kit.status, kit.cableLength,
+    kit.id, kit.modelIds, kit.status, kit.cableLength,
     kit.leftJoysticks, kit.rightJoysticks,
     kit.needsFeederValves, kit.needsExtraQio,
     kit.steeringKits, kit.configPartNumber,
     kit.prerequisites, kit.limitations,
     kit.updatedAt, kit.updatedBy,
-    kit.cableKitPartNumber, kit.cableKitDescription
+    kit.cableKitPartNumber, kit.cableKitDescription,
+    kit.joystickRollerType, kit.joystickButtonType,
+    kit.joystickConnectorType, kit.joystickConnectorPins,
+    kit.safetyGateSignal, kit.machineType
   ]);
   return kit;
 }
@@ -270,24 +309,26 @@ function updateKitRequest(id: string, status: string, adminNote: string): void {
 // ─── Composite read for Sales view ───────────────────────────────────────────
 
 function getBrandsWithModels() {
-  const brands  = getAllBrands().filter(b => b.active);
-  const models  = getAllModels();
-  const kits    = getAllKits();
+  const brands = getAllBrands().filter(b => b.active);
+  const models = getAllModels();
+  const kits   = getAllKits();
 
-  // Build a set of modelIds that have a visible kit
-  const visibleModelIds = new Set(
-    kits.filter(k => k.status === 'available' || k.status === 'coming_soon')
-        .map(k => k.modelId)
-  );
+  // Build modelId → kit status map (only visible statuses)
+  const kitStatusByModelId: { [key: string]: string } = {};
+  for (const kit of kits) {
+    if (kit.status === 'available' || kit.status === 'coming_soon') {
+      for (const id of parseModelIds(kit.modelIds)) {
+        kitStatusByModelId[id] = kit.status;
+      }
+    }
+  }
 
-  // Filter models that belong to visible kits
-  const visibleModels = models.filter(m => visibleModelIds.has(m.id));
+  // Include all brands that have at least one model (not just those with kits)
+  const brandIdsWithModels = new Set(models.map(m => m.brandId));
+  const visibleBrands = brands.filter(b => brandIdsWithModels.has(b.id));
 
-  // Filter brands that have at least one visible model
-  const brandIdsWithKits = new Set(visibleModels.map(m => m.brandId));
-  const visibleBrands = brands.filter(b => brandIdsWithKits.has(b.id));
-
-  return { brands: visibleBrands, models: visibleModels };
+  // Return ALL models so sales users can see and request kits for any machine
+  return { brands: visibleBrands, models, kitStatusByModelId };
 }
 
 // ─── Admin composite read ────────────────────────────────────────────────────
