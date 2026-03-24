@@ -1,11 +1,12 @@
 import { useState, useMemo } from 'react';
-import { RefreshCw, Loader2 } from 'lucide-react';
+import { RefreshCw, Loader2, PlusCircle } from 'lucide-react';
 import type { KitRequest } from '../../types';
 import StatusBadge from '../shared/StatusBadge';
 
 interface Props {
   requests: KitRequest[];
   onUpdateRequest: (id: string, status: string, adminNote: string) => Promise<void>;
+  onCreateKit: (req: KitRequest) => void;
   onRefresh: () => void;
 }
 
@@ -36,7 +37,7 @@ function formatDate(iso: string): string {
   }
 }
 
-export default function RequestList({ requests, onUpdateRequest, onRefresh }: Props) {
+export default function RequestList({ requests, onUpdateRequest, onCreateKit, onRefresh }: Props) {
   const [filterStatus, setFilterStatus] = useState('');
   const [rowStates, setRowStates] = useState<Record<string, RowState>>({});
 
@@ -227,25 +228,35 @@ export default function RequestList({ requests, onUpdateRequest, onRefresh }: Pr
                         />
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        {dirty && (
+                        <div className="flex flex-col gap-1.5">
                           <button
-                            onClick={() => handleSave(req)}
-                            disabled={state.saving}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-sw-orange text-white rounded-lg text-xs font-semibold hover:bg-orange-600 transition-colors disabled:opacity-60"
+                            onClick={() => onCreateKit(req)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs font-semibold hover:bg-gray-700 transition-colors"
+                            title="Open New Kit editor pre-filled for this model"
                           >
-                            {state.saving ? (
-                              <>
-                                <Loader2 className="w-3 h-3 animate-spin" />
-                                Saving…
-                              </>
-                            ) : (
-                              'Save'
-                            )}
+                            <PlusCircle className="w-3 h-3" />
+                            Create Kit
                           </button>
-                        )}
-                        {state.saved && !dirty && (
-                          <span className="text-xs text-emerald-600 font-medium">Saved</span>
-                        )}
+                          {dirty && (
+                            <button
+                              onClick={() => handleSave(req)}
+                              disabled={state.saving}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-sw-orange text-white rounded-lg text-xs font-semibold hover:bg-orange-600 transition-colors disabled:opacity-60"
+                            >
+                              {state.saving ? (
+                                <>
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                  Saving…
+                                </>
+                              ) : (
+                                'Save'
+                              )}
+                            </button>
+                          )}
+                          {state.saved && !dirty && (
+                            <span className="text-xs text-emerald-600 font-medium">Saved</span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );

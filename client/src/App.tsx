@@ -36,6 +36,7 @@ export default function App() {
   const [adminData, setAdminData] = useState<AdminData | null>(null)
   const [adminLoading, setAdminLoading] = useState(false)
   const [editingKit, setEditingKit] = useState<Kit | null | undefined>(undefined)
+  const [prefillModelId, setPrefillModelId] = useState<string | undefined>(undefined)
 
   // Admin preview mode — lets admins see the sales UI
   const [previewMode, setPreviewMode] = useState(false)
@@ -100,7 +101,18 @@ export default function App() {
   }
 
   // ─── Admin actions ───────────────────────────────────────────────────────
-  const handleSaveKit    = async (kit: Kit)    => { await api.saveKit(kit);         setEditingKit(undefined); loadAdminData() }
+  const handleCreateKitFromRequest = (req: import('./types').KitRequest) => {
+    if (!adminData) return
+    const model = adminData.models.find(
+      m => m.name.toLowerCase() === req.modelName.toLowerCase() &&
+           adminData.brands.find(b => b.id === m.brandId)?.name.toLowerCase() === req.brandName.toLowerCase()
+    )
+    setPrefillModelId(model?.id)
+    setEditingKit(null)
+    setAdminView('kit-list') // ensures we're in the kit section
+  }
+
+  const handleSaveKit    = async (kit: Kit)    => { await api.saveKit(kit);         setEditingKit(undefined); setPrefillModelId(undefined); loadAdminData() }
   const handleDeleteKit  = async (id: string)  => { await api.deleteKit(id);        loadAdminData() }
   const handleSaveBrand  = async (b: Brand)    => { await api.saveBrand(b);         loadAdminData() }
   const handleDeleteBrand= async (id: string)  => { await api.deleteBrand(id);      loadAdminData() }
@@ -251,8 +263,9 @@ export default function App() {
               kit={editingKit}
               brands={adminData.brands}
               models={adminData.models}
+              prefillModelId={prefillModelId}
               onSave={handleSaveKit}
-              onCancel={() => setEditingKit(undefined)}
+              onCancel={() => { setEditingKit(undefined); setPrefillModelId(undefined) }}
             />
           </div>
         )}
@@ -260,7 +273,7 @@ export default function App() {
           <div className="max-w-7xl mx-auto px-4 py-6">
             {adminView === 'kit-list'      && <KitList brands={adminData.brands} models={adminData.models} kits={adminData.kits} onEditKit={kit => setEditingKit(kit)} onDeleteKit={handleDeleteKit} onRefresh={loadAdminData} />}
             {adminView === 'brand-manager' && <BrandManager brands={adminData.brands} models={adminData.models} onSaveBrand={handleSaveBrand} onDeleteBrand={handleDeleteBrand} onSaveModel={handleSaveModel} onDeleteModel={handleDeleteModel} onRefresh={loadAdminData} />}
-            {adminView === 'request-list'  && <RequestList requests={adminData.requests ?? []} onUpdateRequest={handleUpdateRequest} onRefresh={loadAdminData} />}
+            {adminView === 'request-list'  && <RequestList requests={adminData.requests ?? []} onUpdateRequest={handleUpdateRequest} onCreateKit={handleCreateKitFromRequest} onRefresh={loadAdminData} />}
           </div>
         )}
       </div>

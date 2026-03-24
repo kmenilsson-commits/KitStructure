@@ -11,6 +11,7 @@ interface Props {
   kit: Kit | null;
   brands: Brand[];
   models: Model[];
+  prefillModelId?: string;
   onSave: (kit: Kit) => Promise<void>;
   onCancel: () => void;
 }
@@ -48,23 +49,30 @@ function buildEmptyKit(): Omit<Kit, 'id' | 'updatedAt' | 'updatedBy'> {
   };
 }
 
-export default function KitEditor({ kit, brands, models, onSave, onCancel }: Props) {
+export default function KitEditor({ kit, brands, models, prefillModelId, onSave, onCancel }: Props) {
   const [form, setForm] = useState<Omit<Kit, 'id' | 'updatedAt' | 'updatedBy'>>(() => {
     if (kit) {
       const { id, updatedAt, updatedBy, ...rest } = kit;
       return rest;
     }
-    return buildEmptyKit();
+    const empty = buildEmptyKit();
+    if (prefillModelId) empty.modelIds = JSON.stringify([prefillModelId]);
+    return empty;
   });
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Derive initial brand from the first selected model
+  // Derive initial brand from the first selected model (or prefill)
   const initialBrandId = useMemo(() => {
-    if (!kit) return '';
-    const firstId = parseJsonArray(kit.modelIds)[0];
-    return models.find(m => m.id === firstId)?.brandId ?? '';
+    if (kit) {
+      const firstId = parseJsonArray(kit.modelIds)[0];
+      return models.find(m => m.id === firstId)?.brandId ?? '';
+    }
+    if (prefillModelId) {
+      return models.find(m => m.id === prefillModelId)?.brandId ?? '';
+    }
+    return '';
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [pickerBrandId, setPickerBrandId] = useState(initialBrandId);
