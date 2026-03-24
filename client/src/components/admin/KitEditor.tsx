@@ -40,6 +40,8 @@ function buildEmptyKit(): Omit<Kit, 'id' | 'updatedAt' | 'updatedBy'> {
     limitations: '',
     cableKitPartNumber: '',
     cableKitDescription: '',
+    drawingsPartNumber: '',
+    drawingsDescription: '',
     joystickRollerType: '',
     joystickButtonType: '',
     joystickConnectorType: '',
@@ -127,10 +129,6 @@ export default function KitEditor({ kit, brands, models, prefillModelId, onSave,
   const handleSave = async () => {
     if (selectedModelIds.length === 0) {
       setError('Please select at least one model.');
-      return;
-    }
-    if (!form.configPartNumber.trim()) {
-      setError('Configuration part number is required.');
       return;
     }
     if (form.cableKitPartNumber && form.cableKitPartNumber.length !== 6) {
@@ -501,7 +499,7 @@ export default function KitEditor({ kit, brands, models, prefillModelId, onSave,
           </h3>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Part Number <span className="text-rose-500">*</span>
+              Part Number
             </label>
             <input
               type="text"
@@ -558,6 +556,54 @@ export default function KitEditor({ kit, brands, models, prefillModelId, onSave,
               />
               <p className="mt-1 text-xs text-gray-400 text-right">
                 {form.cableKitDescription.length}/256
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* Machine / Model Specific Drawings */}
+        <section>
+          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">
+            Machine / Model Specific Drawings
+          </h3>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Drawings Part Number{' '}
+                <span className="text-gray-400 font-normal">(6 digits)</span>
+              </label>
+              <input
+                type="text"
+                value={form.drawingsPartNumber}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, '').slice(0, 6);
+                  setForm((f) => ({ ...f, drawingsPartNumber: val }));
+                }}
+                placeholder="6XXXXX"
+                maxLength={6}
+                className="w-full max-w-xs px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sw-orange focus:border-transparent"
+              />
+              {form.drawingsPartNumber && form.drawingsPartNumber.length !== 6 && (
+                <p className="mt-1 text-xs text-rose-500">Must be exactly 6 digits.</p>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Drawings Description{' '}
+                <span className="text-gray-400 font-normal">(max 256 characters)</span>
+              </label>
+              <textarea
+                value={form.drawingsDescription}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, drawingsDescription: e.target.value.slice(0, 256) }))
+                }
+                rows={2}
+                maxLength={256}
+                placeholder="e.g. Installation drawing for Volvo EC480E QTC adapter…"
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-sw-orange focus:border-transparent"
+              />
+              <p className="mt-1 text-xs text-gray-400 text-right">
+                {form.drawingsDescription.length}/256
               </p>
             </div>
           </div>

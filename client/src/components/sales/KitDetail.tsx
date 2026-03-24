@@ -1,4 +1,5 @@
-import { ArrowLeft, AlertTriangle, AlertCircle, Info, Wrench } from 'lucide-react';
+import { useState } from 'react';
+import { ArrowLeft, AlertTriangle, AlertCircle, Info, Wrench, ChevronDown, ChevronUp } from 'lucide-react';
 import type { Brand, Model, Kit } from '../../types';
 import StatusBadge from '../shared/StatusBadge';
 import EmptyState from '../shared/EmptyState';
@@ -58,6 +59,8 @@ function PartRow({ description, partNumber }: { description: string; partNumber:
 }
 
 export default function KitDetail({ brand, model, kit, onBack, onRequestKit }: Props) {
+  const [baseKitOpen, setBaseKitOpen] = useState(false);
+
   const parseJsonArray = (raw: string): string[] => {
     try {
       const parsed = JSON.parse(raw);
@@ -127,15 +130,32 @@ export default function KitDetail({ brand, model, kit, onBack, onRequestKit }: P
 
       {kit && (
         <div className="space-y-5">
-          {/* 1. Base Kit */}
-          <Card title="Base Kit — 614168">
-            {BASE_KIT_COMPONENTS.map((c) => (
-              <PartRow key={c.partNumber} description={c.description} partNumber={c.partNumber} />
-            ))}
-            <p className="mt-3 text-xs text-gray-400 italic">
-              Cables, labels and accessories included
-            </p>
-          </Card>
+          {/* 1. Base Kit — collapsible */}
+          <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+            <button
+              onClick={() => setBaseKitOpen((o) => !o)}
+              className="w-full flex items-center justify-between px-5 py-3 border-b border-gray-100 bg-gray-50 hover:bg-gray-100 transition-colors"
+            >
+              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+                Base Kit — 614168
+              </h3>
+              {baseKitOpen ? (
+                <ChevronUp className="w-4 h-4 text-gray-400" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-gray-400" />
+              )}
+            </button>
+            {baseKitOpen && (
+              <div className="p-5">
+                {BASE_KIT_COMPONENTS.map((c) => (
+                  <PartRow key={c.partNumber} description={c.description} partNumber={c.partNumber} />
+                ))}
+                <p className="mt-3 text-xs text-gray-400 italic">
+                  Cables, labels and accessories included
+                </p>
+              </div>
+            )}
+          </div>
 
           {/* 2. Boom/Arm Cable */}
           <Card title="Boom / Arm Cable">
@@ -264,9 +284,9 @@ export default function KitDetail({ brand, model, kit, onBack, onRequestKit }: P
             </div>
           </Card>
 
-          {/* 5. Machine Cable Kit */}
-          {kit.cableKitPartNumber && (
-            <Card title="Machine Cable Kit">
+          {/* 5. Machine Cable Kit — always shown */}
+          <Card title="Machine Cable Kit">
+            {kit.cableKitPartNumber ? (
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
                   <span className="font-mono text-2xl font-bold text-gray-800 tracking-wider">
@@ -278,10 +298,29 @@ export default function KitDetail({ brand, model, kit, onBack, onRequestKit }: P
                   <span className="block mt-1 text-xs text-gray-400">Machine-specific cable kit</span>
                 </div>
               </div>
+            ) : (
+              <p className="text-sm text-gray-400 italic">Not configured for this model</p>
+            )}
+          </Card>
+
+          {/* 6. Machine / Model Specific Drawings */}
+          {kit.drawingsPartNumber && (
+            <Card title="Machine / Model Specific Drawings">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <span className="font-mono text-2xl font-bold text-gray-800 tracking-wider">
+                    {kit.drawingsPartNumber}
+                  </span>
+                  {kit.drawingsDescription && (
+                    <p className="mt-1 text-sm text-gray-600">{kit.drawingsDescription}</p>
+                  )}
+                  <span className="block mt-1 text-xs text-gray-400">Machine/model specific drawings</span>
+                </div>
+              </div>
             </Card>
           )}
 
-          {/* 6. Optional Add-ons (renumbered — was 5) */}
+          {/* 7. Optional Add-ons */}
           {(kit.needsFeederValves || kit.needsExtraQio) && (
             <Card title="Optional Add-ons">
               <div className="space-y-3">
@@ -317,7 +356,7 @@ export default function KitDetail({ brand, model, kit, onBack, onRequestKit }: P
             </Card>
           )}
 
-          {/* 6. Steering Kits */}
+          {/* 8. Steering Kits */}
           {hasSteeringKits && (
             <Card title="Machine Steering Kit">
               <div className="mb-2">
@@ -367,17 +406,6 @@ export default function KitDetail({ brand, model, kit, onBack, onRequestKit }: P
             </div>
           )}
 
-          {/* 9. Request button (coming_soon) */}
-          {kit.status === 'coming_soon' && (
-            <div className="pt-2">
-              <button
-                onClick={onRequestKit}
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-sw-orange text-white rounded-lg text-sm font-semibold hover:bg-orange-600 transition-colors"
-              >
-                Request this kit
-              </button>
-            </div>
-          )}
         </div>
       )}
     </div>
