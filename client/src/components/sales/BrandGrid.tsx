@@ -53,6 +53,11 @@ const BRAND_DOMAIN_MAP: Record<string, string> = {
   'Zoomlion': 'zoomlion.com',
 };
 
+/** Returns true when logoFilename is an explicit URL or base64 data URI (admin override). */
+export function isExplicitLogoUrl(s: string | undefined): boolean {
+  return !!s && (s.startsWith('http') || s.startsWith('data:'));
+}
+
 export function getClearbitLogoUrl(brandName: string): string {
   const domain = BRAND_DOMAIN_MAP[brandName]
     ?? `${brandName.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`;
@@ -68,6 +73,7 @@ export function getGoogleFaviconUrl(brandName: string): string {
 interface Props {
   brands: Brand[];
   models: Model[];
+  kitStatusByModelId: Record<string, 'available' | 'coming_soon'>;
   onSelectBrand: (brand: Brand) => void;
 }
 
@@ -141,16 +147,25 @@ function BrandLogo({
 
 export { BrandLogo };
 
-export default function BrandGrid({ brands, models, onSelectBrand }: Props) {
+export default function BrandGrid({ brands, models, kitStatusByModelId, onSelectBrand }: Props) {
   const [search, setSearch] = useState('');
+  const [kitsOnly, setKitsOnly] = useState(false);
 
   const modelCountByBrand: Record<string, number> = {};
   for (const m of models) {
     modelCountByBrand[m.brandId] = (modelCountByBrand[m.brandId] ?? 0) + 1;
   }
 
+  // Brands that have at least one model with a kit (available or coming_soon)
+  const brandsWithKits = new Set(
+    models
+      .filter((m) => kitStatusByModelId[m.id])
+      .map((m) => m.brandId)
+  );
+
   const filtered = brands
     .filter((b) => b.active)
+    .filter((b) => !kitsOnly || brandsWithKits.has(b.id))
     .filter((b) => b.name.toLowerCase().includes(search.toLowerCase().trim()));
 
   return (
@@ -161,6 +176,23 @@ export default function BrandGrid({ brands, models, onSelectBrand }: Props) {
         <p className="mt-1 text-gray-500 text-sm">
           Choose an excavator brand to see available Quantum Connect kits
         </p>
+      </div>
+
+      {/* Filter toggle */}
+      <div className="mb-4">
+        <button
+          onClick={() => setKitsOnly((v) => !v)}
+          className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${
+            kitsOnly
+              ? 'bg-sw-orange text-white border-sw-orange'
+              : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+          }`}
+        >
+          <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${kitsOnly ? 'bg-white border-white' : 'border-gray-400'}`}>
+            {kitsOnly && <span className="text-sw-orange text-xs font-bold leading-none">✓</span>}
+          </span>
+          Show only brands with available kits
+        </button>
       </div>
 
       {/* Search */}
@@ -184,9 +216,9 @@ export default function BrandGrid({ brands, models, onSelectBrand }: Props) {
             const initials = brandInitials(brand.name);
             const circleColor = brandColor(brand.name);
 
-            // Priority: admin-set URL → bundled logo → Clearbit → Google favicon
-            const logoUrl = brand.logoFilename?.startsWith('http')
-              ? brand.logoFilename
+            // Priority: admin-set URL/data URI → bundled logo → Clearbit → Google favicon
+            const logoUrl = isExplicitLogoUrl(brand.logoFilename)
+              ? brand.logoFilename!
               : (BUNDLED_LOGOS[brand.name] ?? getClearbitLogoUrl(brand.name));
             const faviconUrl = getGoogleFaviconUrl(brand.name);
 

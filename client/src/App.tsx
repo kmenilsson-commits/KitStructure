@@ -195,6 +195,7 @@ export default function App() {
             <BrandGrid
               brands={salesData.brands}
               models={salesData.models}
+              kitStatusByModelId={salesData.kitStatusByModelId}
               onSelectBrand={handleSelectBrand}
             />
           )}

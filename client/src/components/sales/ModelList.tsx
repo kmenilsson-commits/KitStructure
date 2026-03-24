@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ArrowLeft, Search, ChevronRight, Loader2 } from 'lucide-react';
 import type { Brand, Model } from '../../types';
 import StatusBadge from '../shared/StatusBadge';
-import { BrandLogo, getClearbitLogoUrl, getGoogleFaviconUrl } from './BrandGrid';
+import { BrandLogo, getClearbitLogoUrl, getGoogleFaviconUrl, isExplicitLogoUrl } from './BrandGrid';
 import { BUNDLED_LOGOS } from '../../data/brandLogos';
 
 interface Props {
@@ -59,7 +59,7 @@ export default function ModelList({
       {/* Brand header */}
       <div className="flex items-center gap-4 mb-6">
         <BrandLogo
-          url={brand.logoFilename?.startsWith('http') ? brand.logoFilename : (BUNDLED_LOGOS[brand.name] ?? getClearbitLogoUrl(brand.name))}
+          url={isExplicitLogoUrl(brand.logoFilename) ? brand.logoFilename! : (BUNDLED_LOGOS[brand.name] ?? getClearbitLogoUrl(brand.name))}
           fallbackUrl={getGoogleFaviconUrl(brand.name)}
           name={brand.name}
           initials={brandInitials(brand.name)}

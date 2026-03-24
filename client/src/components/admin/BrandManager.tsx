@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Plus, Pencil, Trash2, Check, X, RefreshCw } from 'lucide-react';
 import type { Brand, Model } from '../../types';
-import { BrandLogo, getClearbitLogoUrl, getGoogleFaviconUrl } from '../sales/BrandGrid';
+import { BrandLogo, getClearbitLogoUrl, getGoogleFaviconUrl, isExplicitLogoUrl } from '../sales/BrandGrid';
 import { BUNDLED_LOGOS } from '../../data/brandLogos';
 
 interface Props {
@@ -71,6 +71,7 @@ export default function BrandManager({
   };
 
   const startEditBrand = (brand: Brand) => {
+    setSelectedBrandId(brand.id);
     setEditingBrandId(brand.id);
     setBrandForm({
       name: brand.name,
@@ -218,18 +219,34 @@ export default function BrandManager({
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">
-                    Logo URL
+                    Logo URL <span className="font-normal text-gray-400">— or drop an image file</span>
                   </label>
-                  <input
-                    type="url"
-                    value={brandForm.logoFilename}
-                    onChange={(e) =>
-                      setBrandForm((f) => ({ ...f, logoFilename: e.target.value }))
-                    }
-                    placeholder="https://…"
-                    className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sw-orange"
-                  />
-                  {brandForm.logoFilename?.startsWith('http') && (
+                  <div
+                    className="relative"
+                    onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('ring-2', 'ring-sw-orange'); }}
+                    onDragLeave={(e) => { e.currentTarget.classList.remove('ring-2', 'ring-sw-orange'); }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.currentTarget.classList.remove('ring-2', 'ring-sw-orange');
+                      const file = e.dataTransfer.files[0];
+                      if (!file || !file.type.startsWith('image/')) return;
+                      const reader = new FileReader();
+                      reader.onload = (ev) => {
+                        const result = ev.target?.result;
+                        if (typeof result === 'string') setBrandForm((f) => ({ ...f, logoFilename: result }));
+                      };
+                      reader.readAsDataURL(file);
+                    }}
+                  >
+                    <input
+                      type="text"
+                      value={brandForm.logoFilename}
+                      onChange={(e) => setBrandForm((f) => ({ ...f, logoFilename: e.target.value }))}
+                      placeholder="https://… or drop an image here"
+                      className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sw-orange"
+                    />
+                  </div>
+                  {isExplicitLogoUrl(brandForm.logoFilename) && (
                     <img
                       src={brandForm.logoFilename}
                       alt="Logo preview"
@@ -287,7 +304,7 @@ export default function BrandManager({
                   {/* Logo thumbnail */}
                   <div className="w-8 h-8 shrink-0">
                     <BrandLogo
-                      url={brand.logoFilename?.startsWith('http') ? brand.logoFilename : (BUNDLED_LOGOS[brand.name] ?? getClearbitLogoUrl(brand.name))}
+                      url={isExplicitLogoUrl(brand.logoFilename) ? brand.logoFilename! : (BUNDLED_LOGOS[brand.name] ?? getClearbitLogoUrl(brand.name))}
                       fallbackUrl={getGoogleFaviconUrl(brand.name)}
                       name={brand.name}
                       initials={brand.name.slice(0, 2).toUpperCase()}
