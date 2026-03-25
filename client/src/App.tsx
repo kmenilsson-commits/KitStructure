@@ -62,7 +62,7 @@ export default function App() {
   // Load for sales users OR when admin enters preview mode
   useEffect(() => {
     if (!auth) return
-    if (auth.role === 'sales' || (auth.role === 'admin' && previewMode && !salesData)) {
+    if ((auth.role === 'sales' && !salesData) || (auth.role === 'admin' && previewMode && !salesData)) {
       loadSalesData()
     }
   }, [auth, previewMode, salesData, loadSalesData])
