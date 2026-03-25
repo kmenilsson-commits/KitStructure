@@ -27,6 +27,7 @@ export default function App() {
   const [salesNav, setSalesNav] = useState<SalesScreen>({ screen: 'brand-grid' })
   const [salesData, setSalesData] = useState<BrandsWithModels | null>(null)
   const [salesLoading, setSalesLoading] = useState(false)
+  const [salesError, setSalesError] = useState<string | null>(null)
   const [loadingModelId, setLoadingModelId] = useState<string | null>(null)
   const [requestModalOpen, setRequestModalOpen] = useState(false)
   const [requestModalTarget, setRequestModalTarget] = useState<{ brand: Brand; model: Model } | null>(null)
@@ -52,9 +53,10 @@ export default function App() {
   // ─── Sales data ─────────────────────────────────────────────────────────
   const loadSalesData = useCallback(() => {
     setSalesLoading(true)
+    setSalesError(null)
     api.getBrandsWithModels()
       .then(data => { setSalesData(data); setSalesLoading(false) })
-      .catch(() => setSalesLoading(false))
+      .catch((err: Error) => { setSalesError(err.message || 'Failed to load kit data.'); setSalesLoading(false) })
   }, [])
 
   // Load for sales users OR when admin enters preview mode
@@ -214,7 +216,19 @@ export default function App() {
   const SalesView = () => (
     <>
       {salesLoading && <LoadingSpinner message="Loading kit data…" />}
-      {!salesLoading && salesData && (
+      {!salesLoading && salesError && (
+        <div className="flex flex-col items-center justify-center py-24 px-4 text-center">
+          <p className="text-red-600 font-semibold text-lg mb-2">Could not load kit data</p>
+          <p className="text-gray-500 text-sm mb-6 max-w-sm">{salesError}</p>
+          <button
+            onClick={loadSalesData}
+            className="px-5 py-2 bg-sw-orange text-white rounded-lg font-medium hover:bg-orange-600 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+      {!salesLoading && !salesError && salesData && (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           {salesNav.screen === 'brand-grid' && (
             <BrandGrid

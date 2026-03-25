@@ -31,6 +31,8 @@ declare const google: {
 // Check if running inside GAS (vs local Vite dev)
 const isGAS = typeof google !== 'undefined' && google?.script?.run;
 
+const GAS_TIMEOUT_MS = 30_000; // 30 seconds — GAS cold-start can be slow for new users
+
 function gasRun<T>(fn: (run: typeof google.script.run) => void): Promise<T> {
   if (!isGAS) {
     return Promise.reject(new Error('google.script.run not available (running in dev mode)'));
@@ -39,8 +41,21 @@ function gasRun<T>(fn: (run: typeof google.script.run) => void): Promise<T> {
     // IMPORTANT: withSuccessHandler / withFailureHandler return a NEW runner object.
     // fn must be called on that object — not on the original google.script.run.
     const runner = google.script.run
-      .withSuccessHandler((result: unknown) => resolve(result as T))
-      .withFailureHandler((err: { message: string }) => reject(new Error(err.message)));
+      .withSuccessHandler((result: unknown) => {
+        clearTimeout(timer);
+        resolve(result as T);
+      })
+      .withFailureHandler((err: { message: string }) => {
+        clearTimeout(timer);
+        reject(new Error(err.message));
+      });
+
+    // Safety net: if GAS never calls either handler (known cold-start quirk),
+    // reject after timeout so the UI can show an error instead of spinning forever.
+    const timer = setTimeout(() => {
+      reject(new Error('Request timed out — please reload and try again.'));
+    }, GAS_TIMEOUT_MS);
+
     fn(runner);
   });
 }
@@ -60,7 +75,7 @@ export const api = {
 
   getBrandsWithModels(): Promise<BrandsWithModels> {
     if (!isGAS) {
-      return Promise.resolve({ brands: [], models: [] });
+      return Promise.resolve({ brands: [], models: [], kitStatusByModelId: {} });
     }
     return gasRun<BrandsWithModels>(run => run.getBrandsWithModels());
   },
